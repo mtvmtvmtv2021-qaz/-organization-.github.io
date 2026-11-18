@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>深海タイピングマスター</title>
+<meta name="google-site-verification" content="NLRxhSIg0Dy_5W9wMoygK9mj4RaHdTvyxggQdC7ojH8" />
 <meta name="description" content="深海タイピングマスター：マティ博士の潜水艇「マティ号」で深海を探検する、ブラウザで遊べる無料のタイピングRPG。実在する300種の魚とバトルし、仲間にして加護を集めよう。">
 <meta name="keywords" content="タイピングゲーム,タイピング練習,無料,ブラウザゲーム,深海,RPG,深海タイピングマスター">
 <meta property="og:title" content="深海タイピングマスター">
@@ -545,7 +546,7 @@ textarea{width:100%;height:70px;background:#01050c;color:var(--ink);border:2px s
       <div class="toolbar"><h2 style="margin:0">記録・セーブ</h2><span class="sp"></span><button class="sm" data-back>◀ 戻る</button></div>
       <table class="statTable" id="recTable"></table>
       <h3>🎫 コード入力</h3>
-      <div class="dim" style="font-size:.8rem;margin-bottom:6px">シリアルコードを入力してください。</div>
+      <div class="dim" style="font-size:.8rem;margin-bottom:6px">シリアルコード（または管理者コード）を入力してください。</div>
       <div class="row" style="justify-content:flex-start"><input id="codeIn" type="text" autocomplete="off" spellcheck="false" placeholder="例：WELCOME"><button class="gold sm" id="codeBtn">入力</button><span id="codeMsg" class="dim" style="font-size:.8rem"></span></div>
       <h3>セーブデータの書き出し・読み込み</h3>
       <div class="dim" style="font-size:.8rem;margin-bottom:6px">セーブはこのブラウザに保存されます。別の端末に移すときは、コードをコピーして読み込んでください。</div>
@@ -1891,7 +1892,7 @@ function updHUD(){
   calcStats();
   const zn = modeZone();
   const chal = R.chal ? Object.keys(R.chal).filter(k=>R.chal[k]).map(k=>CHALS[k].ic).join('') : '';
-  $('#zoneEn').textContent = zn.en + (R.mode==='story' && S.rank ? `  RANK ${S.rank}` : '') + (R.mode==='ta' ? '  TIME ATTACK' : '') + (chal ? '  ' + chal : '');
+  $('#zoneEn').textContent = zn.en + (R.mode==='story' && S.rank ? `  RANK ${S.rank}` : '') + (R.mode==='ta' ? '  TIME ATTACK' : '') + (chal ? '  ' + chal : '') + (S.god ? '  [無敵]' : '');
   $('#zoneName').textContent = zn.name;
   $('#depth').textContent = fmt(targetDepth);
   R.o2 = Math.min(R.o2, ST.maxO2);
@@ -2312,6 +2313,7 @@ function popup(host, text, cls){
 }
 function dealDamage(dmg){
   if (!R || R.dead || !R.E) return;
+  if (S.god){ popup($('#pArtWrap'), '無敵', 'info'); return; }
   R.o2 -= dmg; R.E.dmgTaken += dmg;
   SFX.hurt();
   const pa = $('#pArt'); pa.classList.remove('hurt','enterP'); void pa.offsetWidth; pa.classList.add('hurt');
@@ -3873,7 +3875,14 @@ const BUILTIN_CODES = {
   'DEEPSEA':  { t:'E', v:2000, n:'EXP 2000' },
   'KIRAKIRA': { t:'X', v:0,    n:'色違いの魚（★2）' },
 };
+const ADMIN_HASH = 1690783703;
+const CODE_TYPES = { P:'真珠', E:'EXP', R:'パーツ（レア度 0=N 1=R 2=SR 3=UR）', F:'魚（図鑑番号）', S:'色違いの魚（図鑑番号）' };
 function signCode(payload){ return (hashStr(SERIAL_SALT + payload) >>> 0).toString(36).toUpperCase().padStart(7,'0').slice(-5); }
+function makeCode(t, v){
+  const nonce = Math.floor(Math.random()*46656).toString(36).toUpperCase().padStart(3,'0');
+  const payload = t + Math.max(0, Math.floor(v)).toString(36).toUpperCase() + '-' + nonce;
+  return 'ABY-' + payload + '-' + signCode(payload);
+}
 function applyReward(rw){
   if (rw.t === 'P'){ S.pearls += rw.v; S.rec.pearlsTotal += rw.v; return `真珠 ${rw.v} 個`; }
   if (rw.t === 'E'){ const up = gainExp(rw.v); return `EXP ${rw.v}` + (up ? `（Lv ${S.lv} になった！）` : ''); }
@@ -3886,6 +3895,7 @@ function redeemCode(raw){
   const code = String(raw||'').trim().toUpperCase().replace(/\s+/g,'');
   const msg = t => { $('#codeMsg').textContent = t; };
   if (!code) return;
+  if ((hashStr('admin:' + code) >>> 0) === ADMIN_HASH){ $('#codeIn').value = ''; msg(''); openAdmin(); return; }
   let rw = null, key = null;
   if (BUILTIN_CODES[code]){ rw = BUILTIN_CODES[code]; key = 'b:' + code; }
   else { const m = code.match(/^ABY-([PERFS])([0-9A-Z]+)-([0-9A-Z]{3})-([0-9A-Z]{5})$/); if (m){ const payload = m[1]+m[2]+'-'+m[3]; if (signCode(payload) === m[4]) { rw = { t:m[1], v:parseInt(m[2],36) }; key = 's:' + payload; } } }
@@ -3896,6 +3906,43 @@ function redeemCode(raw){
   persist(); checkAch(); SFX.mate();
   $('#codeIn').value = ''; msg(`コードを受け取りました：${got}`);
   toast(`🎁 シリアルコード<br>${esc(got)} を受け取った！`);
+}
+function openAdmin(){
+  const acts = [
+    ['真珠 +10000', ()=>{ S.pearls += 10000; }],
+    ['探検家 Lv99', ()=>{ S.lv = 99; S.exp = 0; }],
+    ['全層解放・物語クリア済みにする', ()=>{ S.unlocked = 4; S.cleared = true; S.maxRank = Math.max(S.maxRank, 1); for (let i=0;i<5;i++){ S.seen['z'+i]=1; S.seen['o'+i]=1; } S.seen.prologue = 1; }],
+    ['研究所の強化をすべて最大', ()=>{ LAB.forEach(L=>S.lab[L.k]=L.max); }],
+    ['模様替え・塗装をすべて入手', ()=>{ DECO.forEach(d=>S.deco[d.k]=1); Object.keys(PAINTS).forEach(k=>S.paints[k]=1); }],
+    ['ランダムな魚を10匹（色違い含む）', ()=>{ for (let i=0;i<10;i++){ const sp = pick(SPECIES.filter(s=>!s.hidden)); makeMate(sp, Math.random()<.3); dexE(sp.id).s = 1; } }],
+    ['URパーツを3個', ()=>{ for (let i=0;i<3;i++){ let p = genPart(3); addPart(p); } }],
+    ['図鑑をすべて遭遇済みにする', ()=>{ SPECIES.forEach(s=>{ if (!s.hidden) dexE(s.id).s = 1; }); }],
+    ['図鑑をすべて撃破済みにする', ()=>{ SPECIES.forEach(s=>{ if (!s.hidden){ const d = dexE(s.id); d.s = 1; d.k = Math.max(1, d.k); } }); }],
+    ['デイリー報酬・依頼をリセット', ()=>{ S.daily = null; S.req = {}; }],
+    ['潜航ランクを最大に', ()=>{ S.maxRank = 10; }],
+    [`無敵モード：${S.god ? 'ON → OFF' : 'OFF → ON'}`, ()=>{ S.god = !S.god; }],
+  ];
+  modal(`<h3>🛠 管理者メニュー</h3><div class="dim" style="font-size:.8rem;margin-bottom:8px">テストや配布用の機能です。押した内容はすぐセーブに反映されます。</div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">${acts.map((a,i)=>`<button class="sm" data-a="${i}">${esc(a[0])}</button>`).join('')}</div>
+    <h3>🎫 シリアルコードを発行</h3>
+    <div class="row" style="justify-content:flex-start">
+      <select id="admT" style="font-family:inherit;padding:6px;background:#01050c;color:var(--ink);border:2px solid var(--cyd)">${Object.entries(CODE_TYPES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
+      <input id="admV" type="number" min="0" value="1000" style="width:110px;font-family:inherit;padding:6px;background:#01050c;color:var(--ink);border:2px solid var(--cyd)">
+      <button class="gold sm" id="admGen">発行</button></div>
+    <div class="dim" style="font-size:.75rem;margin:4px 0">魚は図鑑番号（1〜301）を入れてください。発行したコードは1つのセーブにつき1回使えます。</div>
+    <textarea id="admOut" readonly placeholder="ここにコードが表示されます"></textarea>
+    <div class="row" style="justify-content:flex-start"><button class="sm" id="admCopy">コピー</button><span id="admMsg" class="dim" style="font-size:.8rem"></span></div>`,
+    [ { t:'閉じる', fn:()=>{ if (G.screen === 'rec') showRec(); } } ]);
+  $('#modalBox').querySelectorAll('[data-a]').forEach(b=>b.onclick = ()=>{ acts[+b.dataset.a][1](); persist(); checkAch(); SFX.buy(); toast('🛠 ' + esc(acts[+b.dataset.a][0])); openAdmin(); });
+  $('#admGen').onclick = ()=>{
+    const t = $('#admT').value, v = +$('#admV').value;
+    if ((t==='F'||t==='S') && (v < 1 || v > SPECIES.length)){ $('#admMsg').textContent = '図鑑番号は 1〜' + SPECIES.length + ' です'; return; }
+    if (t==='R' && (v < 0 || v > 3)){ $('#admMsg').textContent = 'レア度は 0〜3 です'; return; }
+    const code = makeCode(t, v);
+    const what = t==='F'||t==='S' ? `${t==='S'?'色違いの':''}${SPECIES[v-1].name}` : t==='R' ? `${PART_R[v].n}パーツ` : `${CODE_TYPES[t]} ${v}`;
+    $('#admOut').value = `${code}　（${what}）`; $('#admMsg').textContent = '';
+  };
+  $('#admCopy').onclick = ()=>{ const v = $('#admOut').value.split('　')[0]; try { navigator.clipboard.writeText(v).then(()=>$('#admMsg').textContent='コピーしました', ()=>$('#admMsg').textContent='手動でコピーしてください'); } catch(e){ $('#admMsg').textContent = '手動でコピーしてください'; } };
 }
 
 /* =====================================================================
